@@ -1,0 +1,27 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backend (Python)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+backend/.venv/
+
+# Frontend (Node.js)
+node_modules/
+dist/
+.vite/
+.vitest_cache/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
