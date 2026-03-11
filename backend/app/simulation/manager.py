@@ -5,13 +5,13 @@ from .world import World
 from .models import AntPacket
 
 class SimulationManager:
-    N_ANTS = 500
+    N_ANTS = 25 
     SPAWN_RATE = 2.0  # ants/sec (lambda for Poisson process)
     LIFESPAN_MEAN = 1000.0  # seconds
     LIFESPAN_STD = 50.0  # seconds
     SPEED = 50.0 # pixels/sec
     GRASS_LINE_Y = 80.0
-    SPAWN_X_POINTS = [160.0, 400.0, 640.0]
+    SPAWN_X_POINTS = [-20.0, 820.0]
 
     def __init__(self):
         self.world = World()
@@ -79,8 +79,37 @@ class SimulationManager:
         self.colony[mask, 1] += np.sin(self.colony[mask, 2]) * self.SPEED * dt
 
         # Boundary Handling
-        self.colony[mask, 0] = np.clip(self.colony[mask, 0], 0, 799)
-        self.colony[mask, 1] = np.clip(self.colony[mask, 1], 0, 599)
+        # Left boundary (x=0) - only reflect if it was already inside or moving further out
+        # We check if it's <= 0 AND we only reflect if it's NOT an ant that just spawned off-screen to the left
+        left_mask = mask & (self.colony[:, 0] <= 0) & (self.colony[:, 0] > -10)
+        if np.any(left_mask):
+            # Reflect theta across vertical axis: pi - theta
+            self.colony[left_mask, 2] = np.pi - self.colony[left_mask, 2]
+            # Add small random nudge to prevent vertical traps
+            self.colony[left_mask, 2] += np.random.uniform(-0.5, 0.5, size=np.sum(left_mask))
+            self.colony[left_mask, 0] = 0.1 # Move slightly away
+            
+        # Right boundary (x=799)
+        right_mask = mask & (self.colony[:, 0] >= 799) & (self.colony[:, 0] < 810)
+        if np.any(right_mask):
+            self.colony[right_mask, 2] = np.pi - self.colony[right_mask, 2]
+            self.colony[right_mask, 2] += np.random.uniform(-0.5, 0.5, size=np.sum(right_mask))
+            self.colony[right_mask, 0] = 798.9
+
+        # Top boundary (y=GRASS_LINE_Y)
+        top_mask = mask & (self.colony[:, 1] <= self.GRASS_LINE_Y)
+        if np.any(top_mask):
+            # Reflect theta across horizontal axis: -theta
+            self.colony[top_mask, 2] = -self.colony[top_mask, 2]
+            self.colony[top_mask, 2] += np.random.uniform(-0.5, 0.5, size=np.sum(top_mask))
+            self.colony[top_mask, 1] = self.GRASS_LINE_Y + 0.1
+
+        # Bottom boundary (y=599)
+        bottom_mask = mask & (self.colony[:, 1] >= 599)
+        if np.any(bottom_mask):
+            self.colony[bottom_mask, 2] = -self.colony[bottom_mask, 2]
+            self.colony[bottom_mask, 2] += np.random.uniform(-0.5, 0.5, size=np.sum(bottom_mask))
+            self.colony[bottom_mask, 1] = 598.9
 
         # 5. Collision Detection & Response
         gxs = (self.colony[mask, 0] // self.world.GRID_SCALE).astype(int)
@@ -93,7 +122,6 @@ class SimulationManager:
         is_dirt = self.world.grid[gxs, gys] == 1
         
         # State 1 (Digging) clears dirt, others collide
-        digging_and_colliding = mask & (self.colony[:, 3] == 1)
         # We need to map back to full colony indices
         active_indices = np.where(mask)[0]
         
@@ -112,6 +140,10 @@ class SimulationManager:
             self.colony[colliding_indices, 0] += np.cos(self.colony[colliding_indices, 2]) * 2.0
             self.colony[colliding_indices, 1] += np.sin(self.colony[colliding_indices, 2]) * 2.0
 
+        # Final Clip as a final safety check
+        self.colony[mask, 0] = np.clip(self.colony[mask, 0], -50, 849)
+        self.colony[mask, 1] = np.clip(self.colony[mask, 1], self.GRASS_LINE_Y, 599)
+
     def _spawn_ant(self):
         # Find first row where active == 0 and age == 0
         potential_slots = np.where((self.colony[:, 6] == 0) & (self.colony[:, 5] == 0))[0]
@@ -119,7 +151,14 @@ class SimulationManager:
             idx = potential_slots[0]
             spawn_x = np.random.choice(self.SPAWN_X_POINTS)
             spawn_y = self.GRASS_LINE_Y
-            spawn_theta = np.random.uniform(0, 2 * np.pi)
+            
+            # Orient towards screen
+            if spawn_x < 0:
+                # Face Right: theta in range [-pi/4, pi/4]
+                spawn_theta = np.random.uniform(-np.pi/4, np.pi/4)
+            else:
+                # Face Left: theta in range [3pi/4, 5pi/4]
+                spawn_theta = np.random.uniform(3*np.pi/4, 5*np.pi/4)
             
             self.colony[idx] = [spawn_x, spawn_y, spawn_theta, 0, 0, 0, 1]
             self.lifespans[idx] = np.random.normal(self.LIFESPAN_MEAN, self.LIFESPAN_STD)

@@ -10,9 +10,9 @@ class World:
         # Initialize grid with Dirt (1)
         self.grid = np.ones((self.GRID_WIDTH, self.GRID_HEIGHT), dtype=np.int8)
         
-        # Top 15% is Air (0)
-        air_height = int(self.GRID_HEIGHT * 0.15)
-        self.grid[:, :air_height] = 0
+        # Top 17 cells are Air (0). 17 * 5 = 85 pixels.
+        # This ensures that at y=80 (gy=16), the ant is in Air and can walk along the surface.
+        self.grid[:, :17] = 0
         
         # Track changes to the grid
         self.deltas: List[Tuple[int, int]] = []
